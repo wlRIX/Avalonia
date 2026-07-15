@@ -36,10 +36,15 @@ internal partial class WindowImpl : WindowBaseImpl, IWindowImpl
     // This is a limitation of V1 of the protocol that's supported in the wild
     private bool _csdSticky;
     private string? _title;
+    // Resolved app id (WaylandPlatformOptions.AppId, else the entry assembly
+    // name — mirrors X11PlatformOptions.WmClass). Immutable for the process,
+    // so it's captured once and handed to the worker toplevel at creation.
+    private readonly string? _appId;
     private FallbackStorageProvider? _storageProvider;
 
-    public WindowImpl(WaylandWorkerClient client) : base(client)
+    public WindowImpl(WaylandWorkerClient client, string? appId) : base(client)
     {
+        _appId = appId;
         CurrentSink = new Sink(this, false);
     }
 

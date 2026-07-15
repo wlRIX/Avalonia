@@ -11,13 +11,15 @@ namespace Avalonia.Wayland;
 class WaylandTopLevelFactory : IWindowingPlatform
 {
     private readonly WaylandWorkerClient _client;
+    private readonly string? _appId;
 
-    public WaylandTopLevelFactory(WaylandWorkerClient client)
+    public WaylandTopLevelFactory(WaylandWorkerClient client, string? appId)
     {
         _client = client;
+        _appId = appId;
     }
 
-    public IWindowImpl CreateWindow() => new WindowImpl(_client);
+    public IWindowImpl CreateWindow() => new WindowImpl(_client, _appId);
 
     public ITopLevelImpl CreateEmbeddableTopLevel() => throw new System.NotSupportedException();
 

@@ -19,7 +19,7 @@ partial class WindowImpl
 
         public Sink(WindowImpl parent, bool secondShow) : base(parent)
         {
-            _handle = Parent.Client.CreateTopLevelHandle(new WXdgTopLevelEventSinkProxy(this, WaylandMarshallers.UIThread));
+            _handle = Parent.Client.CreateTopLevelHandle(new WXdgTopLevelEventSinkProxy(this, WaylandMarshallers.UIThread), Parent._appId);
             _surfaceProxy = _handle.Proxy;
             Parent._handle = _handle;
             Parent._surfaceProxy = _surfaceProxy;

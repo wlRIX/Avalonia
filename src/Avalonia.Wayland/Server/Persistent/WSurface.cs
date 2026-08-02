@@ -557,15 +557,20 @@ class WXdgTopLevel : WXdgShellSurface, IWXdgTopLevel
     private Size? _minSize;
     private Size? _maxSize;
     private string? _title;
+    // Immutable per-process app id (compositors use it for window rules,
+    // task grouping, .desktop matching, etc.). Supplied at construction from
+    // the resolved WaylandPlatformOptions.AppId; re-applied on every connect.
+    private readonly string? _appId;
 
     private ZxdgToplevelDecorationV1? _decoration;
     // Disable SSD support completely and don't allow re-enabling it because we can't
     // TODO: Wait for V2 version of the protocol to gain more adoption and implement it on our side
     private bool _csdSticky;
 
-    public WXdgTopLevel(WaylandWorker worker, WXdgTopLevelEventSinkProxy eventSink) : base(worker, eventSink)
+    public WXdgTopLevel(WaylandWorker worker, WXdgTopLevelEventSinkProxy eventSink, string? appId) : base(worker, eventSink)
     {
         _topLevelEventSink = eventSink;
+        _appId = appId;
     }
 
     public override void OnConnected(WaylandConnection connection, WaylandGlobals globals)
@@ -587,6 +592,12 @@ class WXdgTopLevel : WXdgShellSurface, IWXdgTopLevel
         // Re-apply cached title on reconnect.
         if (_title != null)
             _xdgTopLevel.SetTitle(_title);
+
+        // Apply the app id (set before the first commit below so it's present
+        // when the compositor maps the toplevel and evaluates window rules).
+        // Immutable, so this is also correct on reconnect.
+        if (_appId != null)
+            _xdgTopLevel.SetAppId(_appId);
 
         // Re-apply cached min/max if they were ever set on a previous
         // (now-dead) connection. The OnConnected commit below will

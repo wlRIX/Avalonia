@@ -20,6 +20,16 @@ public class WaylandPlatformOptions
     public string? WlDisplayName { get; set; }
 
     /// <summary>
+    /// The application id reported to the compositor via <c>xdg_toplevel.set_app_id</c>.
+    /// Compositors use it for window rules, task-bar grouping, and matching the
+    /// application's <c>.desktop</c> file, so it should follow the desktop-entry
+    /// naming convention (e.g. <c>com.example.MyApp</c>). When <c>null</c>, the
+    /// entry assembly name is used, mirroring <c>X11PlatformOptions.WmClass</c>
+    /// so the id is identical under native Wayland and XWayland.
+    /// </summary>
+    public string? AppId { get; set; }
+
+    /// <summary>
     /// An already-opened file descriptor for the Wayland display socket.
     /// When set, <see cref="WlDisplayName"/> is ignored and
     /// <c>wl_display_connect_to_fd</c> is used instead of <c>wl_display_connect</c>.

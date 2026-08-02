@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Reflection;
 using Avalonia.Controls.Platform;
 using Avalonia.FreeDesktop;
 using Avalonia.Input;
@@ -45,9 +46,15 @@ class WaylandPlatform
         var clipboardImpl = new WaylandClipboardImpl(worker);
         var clipboard = new Input.Platform.Clipboard(clipboardImpl);
 
+        // Resolve the xdg_toplevel app id once. Explicit option wins; otherwise
+        // fall back to the entry assembly name, matching X11PlatformOptions.WmClass
+        // (X11Platform.cs) so the compositor sees the same id under XWayland and
+        // native Wayland.
+        var appId = options.AppId ?? Assembly.GetEntryAssembly()?.GetName().Name;
+
         AvaloniaLocator.CurrentMutable
 
-            .Bind<IWindowingPlatform>().ToConstant(new WaylandTopLevelFactory(worker.Client))
+            .Bind<IWindowingPlatform>().ToConstant(new WaylandTopLevelFactory(worker.Client, appId))
             .Bind<IRenderLoop>().ToConstant(worker.RenderLoop)
             .Bind<PlatformHotkeyConfiguration>().ToConstant(new PlatformHotkeyConfiguration(KeyModifiers.Control))
             .Bind<KeyGestureFormatInfo>()

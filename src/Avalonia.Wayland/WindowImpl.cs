@@ -279,7 +279,26 @@ internal partial class WindowImpl : WindowBaseImpl, IWindowImpl
 
     public void SetIcon(IWindowIconImpl? icon) { }
     public void ShowTaskbarIcon(bool value) { }
-    public void CanResize(bool value) => _canResize = value;
+    public void CanResize(bool value)
+    {
+        if (_canResize == value)
+            return;
+        _canResize = value;
+        // A window that cannot be resized says so by pinning its minimum and maximum
+        // together; see PushSizeConstraints. Avalonia.X11 does the same thing through
+        // WM_NORMAL_HINTS (X11Window.UpdateSizeHints), and this is the xdg-shell spelling
+        // of it -- the only one the protocol has.
+        PushSizeConstraints();
+    }
+
+    // Neither of these can be expressed on Wayland. xdg-shell has no request for "do not
+    // maximize me" or "do not minimize me": xdg_toplevel.wm_capabilities runs the other way,
+    // compositor to client, telling the app which controls to *draw*. Avalonia.X11 puts them
+    // in _MOTIF_WM_HINTS' functions field, which has no Wayland counterpart.
+    //
+    // CanMaximize is not wholly lost: a window that also sets CanResize = false ends up with
+    // min == max, and a compositor cannot maximize a window that cannot grow. It is
+    // CanMaximize = false *with* resizing still allowed that has nowhere to go.
     public void SetCanMinimize(bool value) { }
     public void SetCanMaximize(bool value) { }
 
@@ -362,6 +381,11 @@ internal partial class WindowImpl : WindowBaseImpl, IWindowImpl
             _resizeStackDepth++;
             // Size is just a number, the actual resizing is done by the compositor when submitting a frame
             ClientSize = clientSize;
+            // A pinned window pins to whatever size it has now, so the constraints move with
+            // it -- otherwise a SizeToContent window with CanResize = false would stay pinned
+            // to the size it happened to start at.
+            if (!_canResize)
+                PushSizeConstraints();
             Resized?.Invoke(clientSize, reason);
         }
         finally
@@ -382,7 +406,47 @@ internal partial class WindowImpl : WindowBaseImpl, IWindowImpl
                 : (Size?)null;
         _minSize = Normalize(minSize);
         _maxSize = Normalize(maxSize);
-        _surfaceProxy?.SetMinMaxSize(_minSize, _maxSize);
+        PushSizeConstraints();
+    }
+
+    /// <summary>
+    /// Send the constraints the compositor should enforce: what the application asked for,
+    /// unless resizing is off, in which case the window is pinned to the size it has now.
+    /// </summary>
+    /// <remarks>
+    /// Always sends, rather than skipping when nothing is constrained, because *lifting* a
+    /// constraint has to travel too -- CanResize going back to true must un-pin the window.
+    /// The worker drops a push that matches what it already sent (WSurface.SetMinMaxSize), so
+    /// a redundant call costs nothing.
+    /// </remarks>
+    private void PushSizeConstraints()
+    {
+        var (min, max) = EffectiveSizeConstraints();
+        _surfaceProxy?.SetMinMaxSize(min, max);
+    }
+
+    /// <summary>
+    /// The min/max pair to put on the wire, in xdg window-geometry space.
+    /// </summary>
+    private (Size? Min, Size? Max) EffectiveSizeConstraints()
+    {
+        if (_canResize)
+            return (_minSize, _maxSize);
+
+        // Pinned to the current size. ClientSize carries the shadow extents (see the configure
+        // handler, which adds them); xdg min/max are window geometry, which does not -- so take
+        // them back off, the same conversion in reverse.
+        var width = ClientSize.Width - _shadowExtents.Left - _shadowExtents.Right;
+        var height = ClientSize.Height - _shadowExtents.Top - _shadowExtents.Bottom;
+        if (width <= 0 || height <= 0)
+        {
+            // Nothing has been laid out yet, so there is no size to pin to. The replay in
+            // OnConnected and the next Resize both come back through here once there is.
+            return (_minSize, _maxSize);
+        }
+
+        var pinned = new Size(width, height);
+        return (pinned, pinned);
     }
 
     public void SetExtendClientAreaToDecorationsHint(bool extendIntoClientAreaHint)

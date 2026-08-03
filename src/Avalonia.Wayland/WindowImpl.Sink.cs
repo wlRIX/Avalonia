@@ -49,10 +49,12 @@ partial class WindowImpl
                 _surfaceProxy.SetTitle(Parent._title);
 
             // Re-apply cached min/max size constraints after a fresh worker
-            // surface is created. null on both sides means SetMinMaxSize was
-            // never called (or both bounds are unconstrained) — nothing to push.
-            if (Parent._minSize.HasValue || Parent._maxSize.HasValue)
-                _surfaceProxy.SetMinMaxSize(Parent._minSize, Parent._maxSize);
+            // surface is created. Nothing to push when the application never
+            // constrained anything *and* the window is freely resizable — a
+            // non-resizable one is pinned to its current size, which is a
+            // constraint even though SetMinMaxSize was never called.
+            if (Parent._minSize.HasValue || Parent._maxSize.HasValue || !Parent._canResize)
+                Parent.PushSizeConstraints();
 
             // Re-apply cursor (defaults to Arrow on a fresh worker WSurface).
             if (Parent.CurrentCursor is not null)

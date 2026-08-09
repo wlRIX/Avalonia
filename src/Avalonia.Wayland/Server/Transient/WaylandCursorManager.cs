@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Avalonia.Input;
 using Avalonia.SourceGenerator;
 using Avalonia.Wayland.Server.Interop;
@@ -10,7 +11,13 @@ namespace Avalonia.Wayland.Server.Transient;
 
 partial class WaylandCursorManager : IDisposable
 {
-    private readonly IntPtr _theme;
+    /// <summary>
+    /// The size to load when <c>XCURSOR_SIZE</c> says nothing, which is what every toolkit
+    /// assumes in the same situation.
+    /// </summary>
+    private const int DefaultCursorSize = 24;
+
+    private IntPtr _theme;
     private readonly Dictionary<StandardCursorType, CursorEntry?> _cursors = new();
     private readonly WlDisplay _display;
     private readonly WlCompositor _compositor;
@@ -49,12 +56,67 @@ partial class WaylandCursorManager : IDisposable
     {
         _display = display;
         _compositor = compositor;
-        _theme = UnsafeNativeMethods.wl_cursor_theme_load(null, 24, shm.Handle);
+
+        // The desktop's theme, not "whatever this machine calls default".
+        //
+        // libwayland-cursor does not read XCURSOR_THEME itself -- it takes the theme name as an
+        // argument and treats null as "default" -- so a client that passes null gets the machine
+        // default (Adwaita on most distributions) however the session is themed. Every other
+        // toolkit reads the variable itself; this is that.
+        //
+        // XCURSOR_PATH, which decides where a theme is searched for, *is* honored inside
+        // libwayland-cursor, so only the name and size are ours to pass.
+        var size = CursorSize();
+        var name = Environment.GetEnvironmentVariable("XCURSOR_THEME");
+        if (string.IsNullOrWhiteSpace(name))
+            name = null;
+
+        _theme = UnsafeNativeMethods.wl_cursor_theme_load(name, size, shm.Handle);
         if (_theme == IntPtr.Zero)
             throw new AvaloniaWaylandException("Failed to load default cursor theme");
 
         foreach (var type in CursorNames.Keys)
             LoadCursor(type);
+
+        // A named theme that is not installed loads as an empty one rather than failing, and an
+        // empty theme means every lookup below returns null -- which this class reads as "hide the
+        // cursor". A misspelled XCURSOR_THEME would therefore leave the app with no pointer at
+        // all, so fall back to the machine default and keep one.
+        if (name is not null && (!_cursors.TryGetValue(StandardCursorType.Arrow, out var arrow) || arrow is null))
+        {
+            ReleaseCursors();
+            UnsafeNativeMethods.wl_cursor_theme_destroy(_theme);
+
+            _theme = UnsafeNativeMethods.wl_cursor_theme_load(null, size, shm.Handle);
+            if (_theme == IntPtr.Zero)
+                throw new AvaloniaWaylandException("Failed to load default cursor theme");
+
+            foreach (var type in CursorNames.Keys)
+                LoadCursor(type);
+        }
+    }
+
+    /// <summary>
+    /// The size from <c>XCURSOR_SIZE</c>, or <see cref="DefaultCursorSize"/>.
+    /// </summary>
+    /// <remarks>
+    /// Nominal rather than literal: libwayland-cursor picks the nearest size the theme actually
+    /// carries. A value that is not a positive number is ignored rather than passed on, since
+    /// asking for size 0 matches a theme's smallest image and leaves a speck on screen.
+    /// </remarks>
+    private static int CursorSize()
+    {
+        var value = Environment.GetEnvironmentVariable("XCURSOR_SIZE");
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var size) && size > 0
+            ? size
+            : DefaultCursorSize;
+    }
+
+    private void ReleaseCursors()
+    {
+        foreach (var entry in _cursors.Values)
+            entry?.Surface.Dispose();
+        _cursors.Clear();
     }
 
     private unsafe void LoadCursor(StandardCursorType type)
@@ -110,9 +172,7 @@ partial class WaylandCursorManager : IDisposable
 
     public void Dispose()
     {
-        foreach (var entry in _cursors.Values)
-            entry?.Surface.Dispose();
-        _cursors.Clear();
+        ReleaseCursors();
 
         if (_theme != IntPtr.Zero)
             UnsafeNativeMethods.wl_cursor_theme_destroy(_theme);

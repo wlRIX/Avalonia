@@ -47,9 +47,15 @@ partial class WaylandCursorManager : IDisposable
         { StandardCursorType.TopRightCorner, ["top_right_corner", "ne-resize"] },
         { StandardCursorType.BottomLeftCorner, ["bottom_left_corner", "sw-resize"] },
         { StandardCursorType.BottomRightCorner, ["bottom_right_corner", "se-resize"] },
-        { StandardCursorType.DragMove, ["grabbing", "dnd-move"] },
-        { StandardCursorType.DragCopy, ["copy", "dnd-copy"] },
-        { StandardCursorType.DragLink, ["alias", "dnd-link"] },
+        // The dnd- names first, and that ordering is the point rather than an accident. A
+        // theme that ships them has drawn them *for dragging*; the generic names are what a
+        // theme falls back on when it has not. Taking `grabbing` first picked the SGI theme's
+        // closedhand, which is itself an alias for fleur -- so a move drop showed the
+        // four-way window-move arrows instead of the drag cursor sitting unused beside them,
+        // and copy, move and link were three names for two pictures.
+        { StandardCursorType.DragMove, ["dnd-move", "grabbing"] },
+        { StandardCursorType.DragCopy, ["dnd-copy", "copy"] },
+        { StandardCursorType.DragLink, ["dnd-link", "alias"] },
     };
 
     public WaylandCursorManager(WlDisplay display, WlShm shm, WlCompositor compositor)

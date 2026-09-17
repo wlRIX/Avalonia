@@ -68,8 +68,15 @@ internal abstract partial class WindowBaseImpl : IWindowBaseImpl
     public PixelPoint Position => default;
     public Point PointToClient(PixelPoint point) => new(point.X, point.Y);
     public PixelPoint PointToScreen(Point point) => new((int)point.X, (int)point.Y);
-    public void Activate() { }
     public void SetTopmost(bool value) { }
+
+    /// <summary>
+    /// Asks the compositor to bring this window forward. Overridden by
+    /// <see cref="WindowImpl"/>, which routes it through
+    /// <c>xdg_activation_v1</c>; a popup has no toplevel to activate, so the
+    /// base does nothing.
+    /// </summary>
+    public virtual void Activate() { }
 
     public abstract Size MaxAutoSizeHint { get; }
     public virtual Size? FrameSize => null;
@@ -220,6 +227,13 @@ internal abstract partial class WindowBaseImpl : IWindowBaseImpl
 
             if (!Parent.IsEnabled)
             {
+                // A modal dialog disables its owner, and this early return is above the
+                // keyboard bookkeeping below — so a key repeat the owner had running would
+                // never be told to stop. It has to be, because the repeat timer calls
+                // Parent.Input directly and its events are then delivered to whatever holds
+                // focus, which is now inside the dialog. Opening a dialog from a shortcut
+                // otherwise types that key into it forever.
+                StopKeyRepeat();
                 OnInputWhileDisabled();
                 return;
             }

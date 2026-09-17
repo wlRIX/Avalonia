@@ -50,6 +50,19 @@ internal interface IWXdgTopLevel : IWXdgShellSurface
     void SetTitle(string? title);
 
     /// <summary>
+    /// Asks the compositor to activate this toplevel, through
+    /// <c>xdg_activation_v1</c>.
+    /// </summary>
+    /// <remarks>
+    /// Fire-and-forget by nature, not just by signature: the protocol defines
+    /// no reply, and what "activate" means is the compositor's to decide —
+    /// raise, focus, or merely flag the window as demanding attention. A
+    /// compositor that does not advertise the global, or that judges the
+    /// request unattributable, drops it silently.
+    /// </remarks>
+    void Activate();
+
+    /// <summary>
     /// Tear down the worker's <c>zxdg_toplevel_decoration_v1</c> object
     /// (if any). Switches the compositor back to "client-side
     /// decorations on next commit" per the v1 spec. Also latches the

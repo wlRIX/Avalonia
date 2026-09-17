@@ -38,6 +38,49 @@ partial class WaylandInputDispatcher : IDisposable
     }
 
     /// <summary>
+    /// Returns a seat and the serial of its most recent input or focus event,
+    /// for requests the protocol requires to be tied to one — currently only
+    /// <c>xdg_activation_token_v1.set_serial</c>.
+    /// </summary>
+    /// <remarks>
+    /// Prefers a seat that has actually seen an event, because a serial of 0
+    /// names no event and a compositor is entitled to refuse a token it cannot
+    /// attribute to a user action. Falls back to the first seat with serial 0
+    /// rather than giving up: smithay accepts such a token (its default
+    /// <c>token_created</c> validates nothing), so this still works on
+    /// wlrix-compositor before any input has arrived. Returns <c>null</c> only
+    /// when there is no seat at all.
+    /// </remarks>
+    internal (WlSeat Seat, uint Serial)? FindActivationSeat()
+    {
+        WlSeat? fallback = null;
+        foreach (var seat in _seats.Values)
+        {
+            if (seat.LastInputSerial != 0)
+                return (seat.WlSeat, seat.LastInputSerial);
+            fallback ??= seat.WlSeat;
+        }
+
+        return fallback is null ? null : (fallback, 0u);
+    }
+
+    /// <summary>
+    /// Returns the <see cref="WlSurface"/> that currently holds keyboard focus
+    /// on any seat, or <c>null</c> if no window of this client is focused.
+    /// Used as the requesting surface of an activation request.
+    /// </summary>
+    internal WlSurface? FindKeyboardFocusedSurface()
+    {
+        foreach (var seat in _seats.Values)
+        {
+            if (seat.KeyboardFocusedSurface?.WlSurface is { } surface)
+                return surface;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Returns the <see cref="WlSurface"/> that currently has pointer focus.
     /// Used as the origin surface for <see cref="WlDataDevice.StartDrag"/>.
     /// </summary>
@@ -161,10 +204,28 @@ partial class WaylandInputDispatcher : IDisposable
         internal WlSurface? PointerFocusedWlSurface => _pointerHandler?._focusedWlSurface;
 
         /// <summary>
+        /// The surface this seat's keyboard focus is on, exposed so an
+        /// activation request can name the window that asked for it.
+        /// </summary>
+        internal WXdgShellSurface? KeyboardFocusedSurface => _keyboardHandler?.FocusedSurface;
+
+        /// <summary>
         /// Current keyboard modifiers (Shift/Ctrl/Alt/Meta), updated by the keyboard handler.
         /// Read by pointer/touch handlers for combined modifier state.
         /// </summary>
         internal RawInputModifiers KeyboardModifiers;
+
+        /// <summary>
+        /// Serial of the most recent input or focus event on this seat.
+        /// </summary>
+        /// <remarks>
+        /// Kept on the seat rather than read back from
+        /// <see cref="WaylandDataDevice.LastInputSerial"/>, which holds the same
+        /// value but only exists when <c>wl_data_device_manager</c> is bound.
+        /// xdg-activation needs a serial on compositors that offer no data
+        /// device, so the two are written side by side at each event.
+        /// </remarks>
+        internal uint LastInputSerial;
 
         public Seat(WaylandInputDispatcher dispatcher, WlRegistry registry, uint globalName, uint version)
         {
@@ -408,6 +469,7 @@ partial class WaylandInputDispatcher : IDisposable
 
             protected override void Button(WlPointer eventSender, uint serial, uint time, uint button, WlPointer.ButtonStateEnum state)
             {
+                handler._seat.LastInputSerial = serial;
                 if (handler._seat.DataDevice != null)
                     handler._seat.DataDevice.LastInputSerial = serial;
 
@@ -559,6 +621,7 @@ partial class WaylandInputDispatcher : IDisposable
             protected override void Down(WlTouch eventSender, uint serial, uint time, WlSurface? surface,
                 int id, WlFixed x, WlFixed y)
             {
+                handler._seat.LastInputSerial = serial;
                 if (handler._seat.DataDevice != null)
                     handler._seat.DataDevice.LastInputSerial = serial;
 

@@ -11,6 +11,7 @@ using NWayland.Protocols.LinuxDmabufV1;
 using NWayland.Protocols.TextInputUnstableV3;
 using NWayland.Protocols.Viewporter;
 using NWayland.Protocols.Wayland;
+using NWayland.Protocols.XdgActivationV1;
 using NWayland.Protocols.XdgDecorationUnstableV1;
 using NWayland.Protocols.XdgForeignUnstableV2;
 using NWayland.Protocols.XdgOutputUnstableV1;
@@ -49,6 +50,15 @@ class WaylandGlobals
     /// every toplevel (no SSD negotiation will be attempted).
     /// </summary>
     public ZxdgDecorationManagerV1? XdgDecorationManager { get; }
+
+    /// <summary>
+    /// Bound when the compositor advertises <c>xdg_activation_v1</c>.
+    /// <c>null</c> means the compositor offers no way to raise or focus a
+    /// window on request, and <see cref="Persistent.WXdgTopLevel.Activate"/>
+    /// becomes a no-op — which is the pre-activation behaviour, so callers
+    /// need no capability check of their own.
+    /// </summary>
+    public XdgActivationV1? XdgActivation { get; }
 
     public bool HasFractionalScaling => FractionalScaleManager != null && Viewporter != null;
 
@@ -158,6 +168,7 @@ class WaylandGlobals
         XdgDecorationManager = platformOptions.ForceDrawnDecorationsInternal
             ? null
             : Bind<ZxdgDecorationManagerV1>(1, 1, null);
+        XdgActivation = Bind<XdgActivationV1>(1, 1, null);
         
         // Seats may have been announced before the data-device manager / text-input
         // manager were bound — InputDispatcher backfills now and constructs the

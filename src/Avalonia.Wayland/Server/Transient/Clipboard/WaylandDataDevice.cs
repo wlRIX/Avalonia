@@ -248,7 +248,7 @@ partial class WaylandDataDevice : IDisposable
     /// trigger event's serial. Called from the Wayland thread.
     /// </summary>
     internal bool StartDrag(WaylandDataSource source, object? platformCookie,
-        WlDataDeviceManager.DndActionEnum allowedActions)
+        WlDataDeviceManager.DndActionEnum allowedActions, WlSurface? icon = null)
     {
         if (platformCookie is not WaylandInputEventCookie cookie
             || !cookie.TryConsume(_display, out _, out var serial))
@@ -261,7 +261,9 @@ partial class WaylandDataDevice : IDisposable
         if (originSurface == null)
             return false;
 
-        _device.StartDrag(source.WlSource, originSurface, null!, serial);
+        // The icon may be null, and usually is: nothing but a client that has gone to the
+        // trouble of supplying one has anything to draw here.
+        _device.StartDrag(source.WlSource, originSurface, icon!, serial);
         return true;
     }
 

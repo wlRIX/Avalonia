@@ -237,6 +237,19 @@ internal partial class WindowImpl : WindowBaseImpl, IWindowImpl
         _surfaceProxy?.SetTitle(title);
     }
 
+    /// <summary>
+    /// Asks the compositor to bring this window forward, through
+    /// <c>xdg_activation_v1</c>.
+    /// </summary>
+    /// <remarks>
+    /// Best-effort, as the protocol intends. There is no reply to wait for and
+    /// no way to learn whether the compositor honoured it, so this returns
+    /// immediately and callers must not assume the window is now frontmost. On
+    /// a compositor with no activation support it does nothing at all, which is
+    /// how this method behaved everywhere before activation was wired up.
+    /// </remarks>
+    public override void Activate() => _surfaceProxy?.Activate();
+
     public void SetParent(IWindowImpl? parent)
     {
         var parentProxy = (parent as WindowImpl)?._handle?.Proxy;

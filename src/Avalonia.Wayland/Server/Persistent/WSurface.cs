@@ -781,6 +781,23 @@ class WXdgTopLevel : WXdgShellSurface, IWXdgTopLevel
     }
 
     /// <summary>
+    /// Worker-thread: asks the compositor to activate this toplevel. No-op while
+    /// disconnected, or when the compositor offers no <c>xdg_activation_v1</c>.
+    /// </summary>
+    public void Activate()
+    {
+        if (Globals is not { } globals || WlSurface is not { } surface || _xdgTopLevel == null)
+            return;
+
+        // The requesting surface is whichever of our windows currently holds
+        // keyboard focus -- which may well be this one, and may be none at all
+        // if the user is working in another application. Passing null then is
+        // correct: set_surface is optional, and letting the compositor refuse
+        // an unfocused client's request is the point of the check.
+        XdgActivationRequest.Start(globals, surface, globals.InputDispatcher.FindKeyboardFocusedSurface(), _appId);
+    }
+
+    /// <summary>
     /// Worker-thread: exports this toplevel via xdg-foreign-unstable-v2, returning a
     /// handle object whose Task resolves once the  compositor has emitted the handle event.
     /// Returns <c>null</c> if the exporter  global is not bound on the current connection

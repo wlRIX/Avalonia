@@ -19,6 +19,9 @@ partial class WaylandInputDispatcher
         private readonly XkbComposeTable? _composeTable;
 
         private WXdgShellSurface? _focusedSurface;
+
+        /// <summary>The surface this seat's keyboard focus is on, if any.</summary>
+        internal WXdgShellSurface? FocusedSurface => _focusedSurface;
         private int _repeatRate;  // keys/sec (0 = disabled)
         private int _repeatDelay; // ms before first repeat
         private XkbCommonKeymap? _keymap;
@@ -95,6 +98,7 @@ partial class WaylandInputDispatcher
                 handler._focusedSurface = WaylandInputDispatcher.FindSurfaceForWlSurface(surface);
                 handler._focusedSurface?.EventSink.OnKeyRepeatInfo(handler._repeatRate, handler._repeatDelay);
 
+                handler._seat.LastInputSerial = serial;
                 if (handler._seat.DataDevice != null)
                     handler._seat.DataDevice.LastInputSerial = serial;
             }
@@ -109,6 +113,7 @@ partial class WaylandInputDispatcher
 
             protected override void Key(WlKeyboard eventSender, uint serial, uint time, uint key, WlKeyboard.KeyStateEnum state)
             {
+                handler._seat.LastInputSerial = serial;
                 if (handler._seat.DataDevice != null)
                     handler._seat.DataDevice.LastInputSerial = serial;
 

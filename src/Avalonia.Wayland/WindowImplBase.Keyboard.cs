@@ -118,7 +118,11 @@ partial class WindowBaseImpl
 
         private void OnKeyRepeatTick(object? sender, EventArgs e)
         {
-            if (InputRoot is null || _keyRepeatTimer == null)
+            // Parent.IsEnabled is false while a modal dialog is up. Checked here as well as
+            // where the window is disabled, because this is the guard that does not depend on
+            // any further event arriving to switch the timer off — and a repeat that outlives
+            // its window's focus is delivered to whatever is focused instead.
+            if (InputRoot is null || _keyRepeatTimer == null || !Parent.IsEnabled)
             {
                 StopKeyRepeat();
                 return;

@@ -115,6 +115,12 @@ class WaylandOutgoingTransfer
         var tcs = new TaskCompletionSource<DragDropEffects>();
         DragDropEffects negotiatedEffects = DragDropEffects.None;
 
+        // Read here, on the UI thread, rather than inside the callback below: the value is a
+        // managed object on an in-process format, and the Wayland thread has no business
+        // reaching into a data transfer.
+        var dragImage = TryGetDragImage();
+        WaylandDragIconSurface? icon = null;
+
         inputCookie.PostOob(globals =>
         {
             var device = globals.InputDispatcher.GetDataDevice();
@@ -157,6 +163,11 @@ class WaylandOutgoingTransfer
             {
                 s_inProcessDrags.Remove(operationKey);
                 source.Dispose();
+                // Cancellation is the common ending -- every drag that lands somewhere that
+                // refuses it comes through here -- so the icon has to go from this path as
+                // much as from the successful one, or a drag leaks a surface each time.
+                icon?.Dispose();
+                icon = null;
                 Dispatcher.UIThread.Post(() =>
                 {
                     Cancelled?.Invoke();
@@ -168,6 +179,8 @@ class WaylandOutgoingTransfer
             {
                 s_inProcessDrags.Remove(operationKey);
                 source.Dispose();
+                icon?.Dispose();
+                icon = null;
                 var result = negotiatedEffects;
                 Dispatcher.UIThread.Post(() => tcs.TrySetResult(result));
             };
@@ -178,10 +191,15 @@ class WaylandOutgoingTransfer
                 // wait for DndFinished or Cancelled to resolve the TCS.
             };
 
-            if (!device.StartDrag(source, inputCookie, allowedActions))
+            if (dragImage != null)
+                icon = WaylandDragIconSurface.Create(globals, dragImage);
+
+            if (!device.StartDrag(source, inputCookie, allowedActions, icon?.Surface))
             {
                 s_inProcessDrags.Remove(operationKey);
                 source.Dispose();
+                icon?.Dispose();
+                icon = null;
                 tcs.TrySetResult(DragDropEffects.None);
             }
         });
@@ -189,10 +207,25 @@ class WaylandOutgoingTransfer
         return tcs.Task;
     }
 
-    /// <summary>
-    /// Creates and configures a <see cref="WaylandDataSource"/> with MIME type offers
-    /// and a send handler that dispatches to the UI thread.
-    /// </summary>
+    /// <summary>The drag image the caller attached to the transfer, if any.</summary>
+    /// <remarks>
+    /// An in-process format, so this never touches the wire and a receiving application sees
+    /// exactly the formats it would have seen without it.
+    /// </remarks>
+    private WaylandDragImage? TryGetDragImage()
+    {
+        try
+        {
+            if (_transfer is IDataTransfer sync)
+                return sync.TryGetValue(WaylandDragImage.Format);
+        }
+        catch (Exception)
+        {
+            // A transfer that will not answer is a drag with no picture, not a failed drag.
+        }
+        return null;
+    }
+
     private WaylandDataSource? CreateSource(WaylandGlobals globals)
     {
         var manager = globals.DataDeviceManager;

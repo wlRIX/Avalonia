@@ -834,6 +834,8 @@ class WXdgPopup : WXdgShellSurface, IWXdgPopup
     private XdgPopup? _xdgPopup;
     private XdgPopupConfigureBatch _pendingBatch = new();
     private XdgPopupPositionerParams? _positioner;
+    private bool _wantsGrab;
+    private bool _hasGrab;
     // 0 is reserved (means "no token"); start at 1 and bump on every reposition.
     private uint _nextRepositionToken = 1;
 
@@ -844,6 +846,47 @@ class WXdgPopup : WXdgShellSurface, IWXdgPopup
         _parent = parent;
     }
     
+    /// <inheritdoc cref="IWXdgPopup.RequestGrab"/>
+    /// <remarks>
+    /// Usually arrives after the xdg_popup already exists. Avalonia decides a popup wants the
+    /// interaction only once it has shown it -- <c>Popup.Open</c> calls <c>Show</c> and then
+    /// <c>TakeFocus</c> -- and showing it is what makes the UI thread hand us a positioner, which
+    /// is what attaches the popup. That is still in time: <c>invalid_grab</c> is "tried to grab
+    /// after being mapped", and a popup is mapped by its first buffer, which the render pass
+    /// cannot have produced while the UI thread is still inside <c>Popup.Open</c>.
+    /// </remarks>
+    public void RequestGrab()
+    {
+        // Recorded either way, so a reconnect recreates the popup with its grab intact.
+        _wantsGrab = true;
+        if (_xdgPopup == null || IsMapped)
+            return;
+        SendGrab();
+    }
+
+    /// <summary>
+    /// Asks the compositor for an explicit grab on the popup, if it will take one.
+    /// </summary>
+    /// <remarks>
+    /// The serial must be one the seat gave out for a real user action, which is the same
+    /// requirement xdg_activation has, so the same helper answers it. A zero serial means no input
+    /// has been seen yet: the compositor would be within its rights to refuse and dismiss the
+    /// popup immediately, so it is better not to ask.
+    /// </remarks>
+    private void SendGrab()
+    {
+        // A grabbing popup whose parent is a popup that did not itself grab is a protocol error,
+        // which kills the connection. Our own parent may have gone without one because there was
+        // no serial to ask with when it was created, so this cannot be inferred from the fact
+        // that a submenu is grabbing at all.
+        if (_parent is WXdgPopup parent && !parent._hasGrab)
+            return;
+        if (Globals?.InputDispatcher.FindActivationSeat() is not { Serial: not 0 } seat)
+            return;
+        _xdgPopup?.Grab(seat.Seat, seat.Serial);
+        _hasGrab = true;
+    }
+
     public void UpdatePositioner(XdgPopupPositionerParams positioner)
     {
         var hadPrevious = _positioner.HasValue;
@@ -918,6 +961,12 @@ class WXdgPopup : WXdgShellSurface, IWXdgPopup
         {
             _pendingBatch = new();
             _xdgPopup = XdgSurface.GetPopup(parentXdgSurface, positioner, new PopupListener(this));
+
+            // A grab is what makes the compositor route input to the popup chain and dismiss it
+            // when a click lands outside, so without one a menu cannot be closed by clicking away
+            // from it or by Escape -- the compositor has no idea the popup wants either.
+            if (_wantsGrab)
+                SendGrab();
         }
         finally
         {
@@ -1055,6 +1104,7 @@ class WXdgPopup : WXdgShellSurface, IWXdgPopup
         _xdgPopup?.Destroy();
         _xdgPopup?.Dispose();
         _xdgPopup = null;
+        _hasGrab = false;
         _pendingBatch = new();
         base.OnDisconnected();
     }

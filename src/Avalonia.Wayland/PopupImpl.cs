@@ -15,9 +15,10 @@ namespace Avalonia.Wayland;
 /// <see cref="WindowImpl.CreatePopup"/> (or another <see cref="PopupImpl.CreatePopup"/>
 /// for nested popups) and parented to either a top-level or another popup.
 ///
-/// <para>We deliberately do NOT call <c>xdg_popup.grab()</c>. Dismissal is
-/// driven by: (1) framework light-dismiss, (2) the compositor's
-/// <c>popup_done</c> event, (3) focus-leave on the parent toplevel.</para>
+/// <para>A popup that takes the interaction asks for <c>xdg_popup.grab()</c> through
+/// <see cref="TakeFocus"/>; that is what lets the compositor dismiss it on a click outside or on
+/// Escape, and what keeps a reposition landing where the pointer is. Dismissal otherwise comes
+/// from framework light-dismiss and the compositor's <c>popup_done</c> event.</para>
 ///
 /// <para>Coordinate convention: the <see cref="PopupPositioner"/>'s
 /// <see cref="IPopupPositioner.Update"/> receives anchor-rect coordinates
@@ -33,6 +34,7 @@ internal partial class PopupImpl : WindowBaseImpl, IPopupImpl
     private WaylandSurfaceCreateResult<WXdgPopupProxy>? _handle;
     private WXdgPopupProxy? _surfaceProxy;
     private XdgPopupPositionerParams? _lastPositioner;
+    private bool _wantsGrab;
 
     public PopupImpl(WaylandWorkerClient client, WindowBaseImpl parent) : base(client)
     {
@@ -104,8 +106,25 @@ internal partial class PopupImpl : WindowBaseImpl, IPopupImpl
         // CSD shadows (if any) are baked into the buffer by the framework.
     }
 
+    /// <summary>
+    /// Avalonia asking the popup to take the interaction, which on Wayland means an explicit
+    /// grab.
+    /// </summary>
+    /// <remarks>
+    /// Called from <c>Popup</c> for a popup whose <c>TakesFocusFromNativeControl</c> is set --
+    /// menus and context menus, not tooltips, which must never take input away from anything.
+    /// That distinction is the whole reason this hangs off TakeFocus rather than being done for
+    /// every popup.
+    /// <para>
+    /// Recorded here as well as forwarded, because this runs immediately after <c>Show</c> and
+    /// the surface is not created until the render loop next comes round. <c>ConnectToSurface</c>
+    /// replays it.
+    /// </para>
+    /// </remarks>
     public void TakeFocus()
     {
+        _wantsGrab = true;
+        _surfaceProxy?.RequestGrab();
     }
 
     /// <summary>

@@ -100,4 +100,15 @@ internal interface IWXdgPopup : IWXdgShellSurface
     /// shown for the first time, and when reposition is invoked.
     /// </summary>
     void UpdatePositioner(XdgPopupPositionerParams positioner);
+
+    /// <summary>
+    /// Asks for an explicit grab when the popup is created.
+    /// </summary>
+    /// <remarks>
+    /// Sent as soon as the worker can, and recorded regardless so a reconnect recreates the popup
+    /// grabbing. The deadline is the popup being mapped, not created: <c>xdg_popup.grab</c> is
+    /// <c>invalid_grab</c>, "tried to grab after being mapped", and a popup is mapped by its first
+    /// buffer. Called from the UI thread, typically just after the surface was created.
+    /// </remarks>
+    void RequestGrab();
 }

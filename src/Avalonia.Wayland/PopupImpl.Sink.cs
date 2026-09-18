@@ -34,6 +34,11 @@ partial class PopupImpl
             Parent._handle = _handle;
             Parent._surfaceProxy = _surfaceProxy;
 
+            // Before the positioner, which is what lets the worker attach: a reconnect replays
+            // the intent recorded by an earlier TakeFocus, so the new popup is created grabbing.
+            if (Parent._wantsGrab)
+                _surfaceProxy.RequestGrab();
+
             // Replay the cached positioner (if Show was called after
             // UpdatePositioner — common Avalonia ordering) so the worker
             // can attach the popup as soon as the parent is mapped.

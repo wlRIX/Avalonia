@@ -339,6 +339,14 @@ partial class WaylandInputDispatcher : IDisposable
         private RawInputModifiers _modifiers;
         private uint _lastEnterSerial;
 
+        // The time of the last pointer event that carried one. wl_pointer.enter and leave carry
+        // no time, but Avalonia orders and pairs pointer events by timestamp -- ToolTipService
+        // tells "left the window" from "moved onto the tooltip" by comparing them, and a leave
+        // stamped 0 matched its initial 0 and was ignored, leaving the tooltip open after the
+        // pointer had gone. So enter and leave borrow the time of the event before them. Never 0
+        // for the same reason, even before the first timed event.
+        private uint _lastEventTime = 1;
+
         // Per-frame: ordered event actions dispatched during Frame
         private readonly List<Action> _frameActions = new();
 
@@ -413,6 +421,12 @@ partial class WaylandInputDispatcher : IDisposable
                 _pointer.SetCursor(_lastEnterSerial, null!, 0, 0);
         }
 
+        private void NoteEventTime(uint time)
+        {
+            if (time != 0)
+                _lastEventTime = time;
+        }
+
         private void ResetFrameState()
         {
             _frameActions.Clear();
@@ -437,6 +451,7 @@ partial class WaylandInputDispatcher : IDisposable
                 var shellSurface = WaylandInputDispatcher.FindSurfaceForWlSurface(surface);
                 var pos = new Point((double)surfaceX, (double)surfaceY);
                 handler._pointerPosition = pos;
+                var time = handler._lastEventTime;
                 handler._frameActions.Add(() =>
                 {
                     handler._focusedSink = shellSurface?.EventSink;
@@ -444,19 +459,20 @@ partial class WaylandInputDispatcher : IDisposable
                     handler._focusedWlSurface = surface;
                     handler._lastEnterSerial = serial;
                     handler.UpdateCursor();
-                    shellSurface?.EventSink.OnPointerEnter(0, serial, pos);
+                    shellSurface?.EventSink.OnPointerEnter(time, serial, pos);
                 });
             }
 
             protected override void Leave(WlPointer eventSender, uint serial, WlSurface? surface)
             {
+                var time = handler._lastEventTime;
                 handler._frameActions.Add(() =>
                 {
                     var leaveSink = handler._focusedSink;
                     handler._focusedSink = null;
                     handler._focusedSurface = null;
                     handler._focusedWlSurface = null;
-                    leaveSink?.OnPointerLeave(serial);
+                    leaveSink?.OnPointerLeave(time, serial);
                 });
             }
 
@@ -464,6 +480,7 @@ partial class WaylandInputDispatcher : IDisposable
             {
                 var pos = new Point((double)surfaceX, (double)surfaceY);
                 handler._pointerPosition = pos;
+                handler.NoteEventTime(time);
                 var mods = handler._modifiers | handler._seat.KeyboardModifiers;
                 handler._frameActions.Add(() =>
                 {
@@ -473,6 +490,7 @@ partial class WaylandInputDispatcher : IDisposable
 
             protected override void Button(WlPointer eventSender, uint serial, uint time, uint button, WlPointer.ButtonStateEnum state)
             {
+                handler.NoteEventTime(time);
                 handler._seat.LastInputSerial = serial;
                 if (handler._seat.DataDevice != null)
                     handler._seat.DataDevice.LastInputSerial = serial;
@@ -521,6 +539,7 @@ partial class WaylandInputDispatcher : IDisposable
             protected override void Axis(WlPointer eventSender, uint time, WlPointer.AxisEnum axis, WlFixed value)
             {
                 handler._frameAxisTimestamp = time;
+                handler.NoteEventTime(time);
 
                 if (axis == WlPointer.AxisEnum.VerticalScroll)
                     handler._frameAxisRawY += (double)value;

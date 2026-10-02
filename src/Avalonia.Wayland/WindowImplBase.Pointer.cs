@@ -16,11 +16,11 @@ partial class WindowBaseImpl
                 RawPointerEventType.Move, position, RawInputModifiers.None));
         }
 
-        void IWSurfaceEventSink.OnPointerLeave(uint serial)
+        void IWSurfaceEventSink.OnPointerLeave(ulong timestamp, uint serial)
         {
             if (InputRoot is null)
                 return;
-            ScheduleInput(new RawPointerEventArgs(Mouse, 0, InputRoot,
+            ScheduleInput(new RawPointerEventArgs(Mouse, timestamp, InputRoot,
                 RawPointerEventType.LeaveWindow, new Point(), RawInputModifiers.None));
         }
 

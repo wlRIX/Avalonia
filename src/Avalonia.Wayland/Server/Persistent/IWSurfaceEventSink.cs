@@ -20,7 +20,7 @@ namespace Avalonia.Wayland.Server.Persistent;
 internal interface IWSurfaceEventSink
 {
     void OnPointerEnter(ulong timestamp, uint serial, Point position);
-    void OnPointerLeave(uint serial);
+    void OnPointerLeave(ulong timestamp, uint serial);
     void OnPointerMotion(ulong timestamp, Point position, RawInputModifiers modifiers);
     void OnPointerButton(ulong timestamp, uint serial, RawPointerEventType type, RawInputModifiers modifiers, Point position, object? platformCookie);
     void OnPointerAxis(ulong timestamp, Vector delta, RawInputModifiers modifiers, Point position);

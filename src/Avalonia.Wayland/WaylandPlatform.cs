@@ -83,7 +83,7 @@ class WaylandPlatform
             .Bind<IClipboardImpl>().ToConstant(clipboardImpl)
             .Bind<IClipboard>().ToConstant(clipboard)
             .Bind<IPlatformDragSource>().ToConstant(new WaylandDragSource())
-            .Bind<IPlatformSettings>().ToSingleton<DBusPlatformSettings>()
+            .Bind<IPlatformSettings>().ToSingleton<WaylandPlatformSettings>()
             .Bind<IMountedVolumeInfoProvider>().ToConstant(new LinuxMountedVolumeInfoProvider())
             .Bind<IPlatformIconLoader>().ToConstant(new X11IconLoader())
             .Bind<IScreenImpl>().ToConstant(screens);
